@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PünktlichPlus</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <div>
+          <p class="eyebrow">NRW v1 · realistische Ankunftsfenster</p>
+          <h1>PünktlichPlus</h1>
+          <p class="lede">
+            Realistischere Ankunftszeiten für Bahnfahrten in NRW, mit Umstiegsrisiko statt
+            Fahrplan-Optimismus. Ein ernsthaftes Portfolio-Projekt mit trockenem Bahn-Humor.
+          </p>
+        </div>
+        <div class="sketch-train" aria-hidden="true">
+          <div class="wire"></div>
+          <div class="train-body">
+            <span></span><span></span><span></span>
+          </div>
+          <div class="track"></div>
+        </div>
+      </section>
+
+      <section class="workspace">
+        <form id="planner" class="panel">
+          <div class="panel-head">
+            <div>
+              <p class="eyebrow">Reise planen</p>
+              <h2>Verbindung</h2>
+            </div>
+            <button class="secondary" type="button" id="add-leg">Abschnitt hinzufügen</button>
+          </div>
+
+          <div id="legs" class="legs"></div>
+
+          <div class="actions">
+            <button type="submit">Vorhersage berechnen</button>
+            <button class="secondary" type="button" id="load-demo">Demo laden</button>
+          </div>
+          <p class="fineprint">
+            Die Prognose nutzt aktuell einen repräsentativen NRW-Datensatz. Die Bahnhofssuche und
+            die frühesten Abfahrten kommen über deine DB-Timetables-Zugangsdaten.
+          </p>
+        </form>
+
+        <section class="results" id="results" aria-live="polite">
+          <div class="empty-state">
+            <p class="eyebrow">Noch keine Prognose</p>
+            <h2>Der Fahrplan sagt: passt schon. Wir fragen nochmal nach.</h2>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <template id="leg-template">
+      <fieldset class="leg">
+        <legend>Leg</legend>
+        <label>
+          <span>Von</span>
+          <input name="origin" list="station-suggestions" placeholder="z. B. Köln Hbf" autocomplete="off" required />
+        </label>
+        <label>
+          <span>Nach</span>
+          <input name="destination" list="station-suggestions" placeholder="z. B. Düsseldorf Hbf" autocomplete="off" required />
+        </label>
+        <label>
+          <span>Linie</span>
+          <input name="line" placeholder="RE1" />
+        </label>
+        <label>
+          <span>Abfahrt</span>
+          <input name="scheduled_departure" type="datetime-local" required />
+        </label>
+        <label>
+          <span>Ankunft laut Plan / Schätzung</span>
+          <input name="scheduled_arrival" type="datetime-local" required />
+        </label>
+        <div class="train-picker">
+          <button class="secondary find-trains" type="button">Früheste Züge finden</button>
+          <div class="train-options">Noch keine DB-Abfrage für diesen Abschnitt.</div>
+        </div>
+        <button class="remove" type="button" aria-label="Abschnitt entfernen">x</button>
+      </fieldset>
+    </template>
+
+    <datalist id="station-suggestions"></datalist>
+    <script src="./app.js" type="module"></script>
+  </body>
+</html>

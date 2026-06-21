@@ -1,0 +1,23 @@
+[
+  {
+    "name": "Koeln to Duesseldorf commuter morning",
+    "route": "Koeln Hbf -> Duesseldorf Hbf, RE1",
+    "known_outcome_delay_minutes": 13,
+    "expected_window_minutes": [6, 18],
+    "note": "Representative validation case from the synthetic NRW sample."
+  },
+  {
+    "name": "Dortmund to Essen Friday afternoon",
+    "route": "Dortmund Hbf -> Essen Hbf, RE6",
+    "known_outcome_delay_minutes": 29,
+    "expected_window_minutes": [18, 34],
+    "note": "Stress case for Ruhrgebiet evening congestion."
+  },
+  {
+    "name": "Bonn to Koeln early commuter",
+    "route": "Bonn Hbf -> Koeln Hbf, RE5",
+    "known_outcome_delay_minutes": 7,
+    "expected_window_minutes": [3, 14],
+    "note": "Shorter route with lower expected delay."
+  }
+]
