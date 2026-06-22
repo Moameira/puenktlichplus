@@ -111,7 +111,13 @@ class DbTimetablesClient:
         self.cache.set(cache_key, value)
         return value
 
-    async def next_departures(self, origin: str, destination: str, when: Optional[datetime] = None) -> dict:
+    async def next_departures(
+        self,
+        origin: str,
+        destination: str,
+        when: Optional[datetime] = None,
+        limit: int = 2,
+    ) -> dict:
         if not self.configured:
             return {"origin": None, "destination": None, "departures": []}
 
@@ -140,7 +146,57 @@ class DbTimetablesClient:
         return {
             "origin": origin_station,
             "destination": destination_station,
-            "departures": list(unique.values())[:2],
+            "departures": list(unique.values())[:limit],
+        }
+
+    async def connection_options(
+        self,
+        origin: str,
+        destination: str,
+        when: Optional[datetime] = None,
+        max_options: int = 4,
+    ) -> dict:
+        moment = when or datetime.now(BERLIN_TZ)
+        if moment.tzinfo is None:
+            moment = moment.replace(tzinfo=BERLIN_TZ)
+
+        options = []
+        direct = await self.next_departures(origin, destination, moment, limit=max_options)
+        for departure in direct["departures"]:
+            options.append(self._connection_from_departures([departure]))
+
+        hubs = ["Düsseldorf Hbf", "Köln Hbf", "Duisburg Hbf", "Essen Hbf", "Dortmund Hbf"]
+        normalized_origin = self._normalize_station(origin)
+        normalized_destination = self._normalize_station(destination)
+        for hub in hubs:
+            if self._normalize_station(hub) in {normalized_origin, normalized_destination}:
+                continue
+            if len(options) >= max_options:
+                break
+            first_legs = await self.next_departures(origin, hub, moment, limit=2)
+            for first_leg in first_legs["departures"]:
+                if len(options) >= max_options:
+                    break
+                first_arrival = self.estimate_arrival(first_leg)
+                second_start = first_arrival + timedelta(minutes=5)
+                second_legs = await self.next_departures(hub, destination, second_start, limit=2)
+                for second_leg in second_legs["departures"]:
+                    if len(options) >= max_options:
+                        break
+                    if self._parse_iso(second_leg["scheduled_departure"]) <= first_arrival:
+                        continue
+                    options.append(self._connection_from_departures([first_leg, second_leg]))
+
+        unique_options = {}
+        for option in sorted(options, key=lambda item: item["departure"]):
+            signature = tuple((leg["line"], leg["scheduled_departure"], leg["destination"]) for leg in option["legs"])
+            unique_options.setdefault(signature, option)
+
+        return {
+            "origin": origin,
+            "destination": destination,
+            "searched_from": moment.isoformat(),
+            "connections": list(unique_options.values())[:max_options],
         }
 
     @staticmethod
@@ -224,10 +280,114 @@ class DbTimetablesClient:
         return departures
 
     @staticmethod
+    def parse_station_board_departures(xml_text: str, station: dict) -> List[dict]:
+        if not xml_text.strip():
+            return []
+        root = ET.fromstring(xml_text)
+        departures = []
+
+        for stop in root.iter():
+            if not stop.tag.endswith("s"):
+                continue
+            timeline = next((child for child in stop if child.tag.endswith("tl")), None)
+            departure = next((child for child in stop if child.tag.endswith("dp")), None)
+            if departure is None:
+                continue
+
+            planned_time = DbTimetablesClient._parse_db_time(departure.attrib.get("pt", ""))
+            if planned_time is None:
+                continue
+
+            path = departure.attrib.get("ppth", "")
+            path_stations = [item.strip() for item in path.split("|") if item.strip()]
+            line = departure.attrib.get("l", "")
+            train_number = timeline.attrib.get("n", "") if timeline is not None else ""
+            train_category = timeline.attrib.get("c", "") if timeline is not None else ""
+            train = " ".join(part for part in [train_category, train_number] if part).strip()
+            departures.append(
+                {
+                    "origin": station["name"],
+                    "destination": path_stations[-1] if path_stations else "",
+                    "line": line or train or "DB",
+                    "train": train or line or "DB",
+                    "platform": departure.attrib.get("pp", ""),
+                    "scheduled_departure": planned_time.isoformat(),
+                    "path": path_stations,
+                }
+            )
+        return departures
+
+    def _connection_from_departures(self, departures: List[dict]) -> dict:
+        legs = []
+        for departure in departures:
+            arrival = self.estimate_arrival(departure)
+            legs.append(
+                {
+                    "origin": departure["origin"],
+                    "destination": departure["destination"],
+                    "line": departure["line"],
+                    "scheduled_departure": departure["scheduled_departure"],
+                    "scheduled_arrival": arrival.isoformat(),
+                    "platform": departure.get("platform", ""),
+                    "train": departure.get("train", departure["line"]),
+                }
+            )
+
+        return {
+            "kind": "direct" if len(legs) == 1 else "transfer",
+            "departure": legs[0]["scheduled_departure"],
+            "arrival": legs[-1]["scheduled_arrival"],
+            "duration_minutes": round((self._parse_iso(legs[-1]["scheduled_arrival"]) - self._parse_iso(legs[0]["scheduled_departure"])).total_seconds() / 60),
+            "transfer_count": max(0, len(legs) - 1),
+            "legs": legs,
+        }
+
+    def estimate_arrival(self, departure: dict) -> datetime:
+        departure_time = self._parse_iso(departure["scheduled_departure"])
+        return departure_time + timedelta(minutes=self.estimate_duration_minutes(departure))
+
+    @staticmethod
+    def estimate_duration_minutes(departure: dict) -> int:
+        route_durations = {
+            ("koeln hbf", "duesseldorf hbf", "re1"): 35,
+            ("köln hbf", "düsseldorf hbf", "re1"): 35,
+            ("duesseldorf hbf", "duisburg hbf", "re1"): 18,
+            ("düsseldorf hbf", "duisburg hbf", "re1"): 18,
+            ("dortmund hbf", "essen hbf", "re6"): 24,
+            ("essen hbf", "duesseldorf hbf", "re6"): 36,
+            ("essen hbf", "düsseldorf hbf", "re6"): 36,
+            ("bonn hbf", "koeln hbf", "re5"): 28,
+            ("bonn hbf", "köln hbf", "re5"): 28,
+        }
+        key = (
+            DbTimetablesClient._normalize_station(departure["origin"]),
+            DbTimetablesClient._normalize_station(departure["destination"]),
+            departure["line"].lower(),
+        )
+        if key in route_durations:
+            return route_durations[key]
+        path_stops = max(2, len(departure.get("path", [])) or 2)
+        return min(180, max(20, round((path_stops - 1) * 3.5)))
+
+    @staticmethod
     def _parse_db_time(value: str) -> Optional[datetime]:
         if len(value) != 10:
             return None
         return datetime.strptime(value, "%y%m%d%H%M").replace(tzinfo=BERLIN_TZ)
+
+    @staticmethod
+    def _parse_iso(value: str) -> datetime:
+        return datetime.fromisoformat(value)
+
+    @staticmethod
+    def _normalize_station(value: str) -> str:
+        return (
+            value.lower()
+            .replace("ö", "oe")
+            .replace("ü", "ue")
+            .replace("ä", "ae")
+            .replace("ß", "ss")
+        )
 
     @staticmethod
     def germanize_station_query(value: str) -> str:

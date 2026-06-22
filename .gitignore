@@ -18,6 +18,7 @@ build/
 
 backend/app/data/cache/
 backend/app/data/cache-debug/
+backend/app/data/collector.sqlite
 *.sqlite
 *.db
 

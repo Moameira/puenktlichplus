@@ -42,12 +42,12 @@ class ConnectionRiskCalculator:
     @staticmethod
     def _message_de(level: str, station: str, buffer: float, probability: float) -> str:
         if level == "invalid":
-            return f"Der Anschluss in {station} faehrt vor der geplanten Ankunft ab."
+            return f"Der Anschluss in {station} fährt vor der geplanten Ankunft ab."
         if level == "high":
-            return f"Heikel: {buffer:.0f} Minuten Umstieg in {station}, historisch ca. {probability:.0%} Verpass-Risiko."
+            return f"Riskant: {buffer:.0f} Minuten Umstieg in {station}, im Modell ca. {probability:.0%} Verpass-Risiko."
         if level == "medium":
-            return f"Knapp, aber nicht hoffnungslos: {buffer:.0f} Minuten in {station}, ca. {probability:.0%} Risiko."
-        return f"Solide geplant: {buffer:.0f} Minuten in {station}, historisch ca. {probability:.0%} Risiko."
+            return f"Knapp, aber nicht hoffnungslos: {buffer:.0f} Minuten in {station}, im Modell ca. {probability:.0%} Risiko."
+        return f"Solide geplant: {buffer:.0f} Minuten in {station}, im Modell ca. {probability:.0%} Risiko."
 
     @staticmethod
     def _message_en(level: str, station: str, buffer: float, probability: float) -> str:

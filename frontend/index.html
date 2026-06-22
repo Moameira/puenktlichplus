@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>PünktlichPlus</title>
+    <title>PünktlichPlus · Umstiegsrisiko-Checker</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet" />
@@ -13,11 +13,11 @@
     <main class="shell">
       <section class="hero">
         <div>
-          <p class="eyebrow">NRW v1 · realistische Ankunftsfenster</p>
+          <p class="eyebrow">NRW v1 · Umstiegsrisiko-Checker</p>
           <h1>PünktlichPlus</h1>
           <p class="lede">
-            Realistischere Ankunftszeiten für Bahnfahrten in NRW, mit Umstiegsrisiko statt
-            Fahrplan-Optimismus. Ein ernsthaftes Portfolio-Projekt mit trockenem Bahn-Humor.
+            Prüft, ob ein Bahn-Umstieg in NRW realistisch ist: echte DB-Abfahrten,
+            erklärbares Risikomodell und weniger Fahrplan-Optimismus.
           </p>
         </div>
         <div class="sketch-train" aria-hidden="true">
@@ -33,65 +33,50 @@
         <form id="planner" class="panel">
           <div class="panel-head">
             <div>
-              <p class="eyebrow">Reise planen</p>
-              <h2>Verbindung</h2>
+              <p class="eyebrow">Verbindung suchen</p>
+              <h2>Start und Ziel</h2>
             </div>
-            <button class="secondary" type="button" id="add-leg">Abschnitt hinzufügen</button>
           </div>
 
-          <div id="legs" class="legs"></div>
+          <div class="route-search">
+            <label>
+              <span>Start</span>
+              <input id="search-origin" list="station-suggestions" value="Köln Hbf" autocomplete="off" required />
+            </label>
+            <label>
+              <span>Ziel</span>
+              <input id="search-destination" list="station-suggestions" value="Düsseldorf Hbf" autocomplete="off" required />
+            </label>
+          </div>
 
           <div class="actions">
-            <button type="submit">Vorhersage berechnen</button>
-            <button class="secondary" type="button" id="load-demo">Demo laden</button>
+            <button class="secondary" type="button" id="previous-connections">Früher</button>
+            <button type="submit">Verbindungen suchen</button>
+            <button class="secondary" type="button" id="later-connections">Später</button>
+          </div>
+          <div id="connection-results" class="connection-results">
+            Noch keine Verbindung gesucht.
+          </div>
+          <div id="api-status" class="api-status">
+            API-Status wird geladen...
           </div>
           <p class="fineprint">
-            Die Prognose nutzt aktuell einen repräsentativen NRW-Datensatz. Die Bahnhofssuche und
-            die frühesten Abfahrten kommen über deine DB-Timetables-Zugangsdaten.
+            Suche wie in einer Fahrplan-App: Start, Ziel, Verbindung auswählen. PünktlichPlus
+            bewertet danach den Umstieg mit einem erklärbaren NRW-Risikomodell.
           </p>
         </form>
 
         <section class="results" id="results" aria-live="polite">
           <div class="empty-state">
-            <p class="eyebrow">Noch keine Prognose</p>
-            <h2>Der Fahrplan sagt: passt schon. Wir fragen nochmal nach.</h2>
+            <p class="eyebrow">Noch keine Prüfung</p>
+            <h2>Füge mindestens zwei Abschnitte hinzu, dann prüfen wir den Umstieg.</h2>
           </div>
         </section>
       </section>
     </main>
 
-    <template id="leg-template">
-      <fieldset class="leg">
-        <legend>Leg</legend>
-        <label>
-          <span>Von</span>
-          <input name="origin" list="station-suggestions" placeholder="z. B. Köln Hbf" autocomplete="off" required />
-        </label>
-        <label>
-          <span>Nach</span>
-          <input name="destination" list="station-suggestions" placeholder="z. B. Düsseldorf Hbf" autocomplete="off" required />
-        </label>
-        <label>
-          <span>Linie</span>
-          <input name="line" placeholder="RE1" />
-        </label>
-        <label>
-          <span>Abfahrt</span>
-          <input name="scheduled_departure" type="datetime-local" required />
-        </label>
-        <label>
-          <span>Ankunft laut Plan / Schätzung</span>
-          <input name="scheduled_arrival" type="datetime-local" required />
-        </label>
-        <div class="train-picker">
-          <button class="secondary find-trains" type="button">Früheste Züge finden</button>
-          <div class="train-options">Noch keine DB-Abfrage für diesen Abschnitt.</div>
-        </div>
-        <button class="remove" type="button" aria-label="Abschnitt entfernen">x</button>
-      </fieldset>
-    </template>
-
     <datalist id="station-suggestions"></datalist>
+    <script src="./config.js"></script>
     <script src="./app.js" type="module"></script>
   </body>
 </html>

@@ -1,137 +1,138 @@
 const API_BASE = window.PUENKTLICHPLUS_API_BASE || "http://localhost:8000";
 
 const state = {
-  routes: [],
+  offsetMinutes: 0,
+  connections: [],
 };
 
-const legsEl = document.querySelector("#legs");
-const resultsEl = document.querySelector("#results");
-const template = document.querySelector("#leg-template");
 const planner = document.querySelector("#planner");
+const resultsEl = document.querySelector("#results");
 const stationSuggestionsEl = document.querySelector("#station-suggestions");
+const connectionResultsEl = document.querySelector("#connection-results");
+const apiStatusEl = document.querySelector("#api-status");
+const originInput = document.querySelector("#search-origin");
+const destinationInput = document.querySelector("#search-destination");
 let stationSearchTimer;
 
-async function loadRoutes() {
-  const response = await fetch(`${API_BASE}/routes`);
-  state.routes = await response.json();
-}
-
-function uniqueStations() {
-  return [...new Set(state.routes.flatMap((route) => [route.origin, route.destination]))].sort();
-}
-
-function addLeg(route = state.routes[0], times = {}) {
-  const node = template.content.firstElementChild.cloneNode(true);
-  const origin = node.querySelector('[name="origin"]');
-  const destination = node.querySelector('[name="destination"]');
-  origin.value = route?.origin || "";
-  destination.value = route?.destination || "";
-  node.querySelector('[name="line"]').value = route.line;
-  node.querySelector('[name="scheduled_departure"]').value = times.departure || "";
-  node.querySelector('[name="scheduled_arrival"]').value = times.arrival || "";
-  node.querySelector(".find-trains").addEventListener("click", () => findTrainsForLeg(node));
-  for (const input of [origin, destination]) {
-    input.addEventListener("input", () => queueStationSuggestions(input.value));
+async function loadApiStatus() {
+  try {
+    const response = await fetch(`${API_BASE}/health`);
+    if (!response.ok) throw new Error(`Status ${response.status}`);
+    const data = await response.json();
+    const snapshots = data.collector?.snapshot_count || 0;
+    apiStatusEl.innerHTML = `
+      <strong>Backend verbunden</strong>
+      <span>DB-Zugang: ${data.db_credentials_configured ? "aktiv" : "fehlt"} · Collector-Snapshots: ${snapshots}</span>
+    `;
+    apiStatusEl.classList.add("ok");
+  } catch {
+    apiStatusEl.innerHTML = `
+      <strong>Backend nicht erreichbar</strong>
+      <span>Prüfe die API-Adresse in config.js oder starte FastAPI lokal.</span>
+    `;
+    apiStatusEl.classList.remove("ok");
   }
-  node.querySelector(".remove").addEventListener("click", () => {
-    if (legsEl.children.length > 1) node.remove();
+}
+
+async function searchConnections(event) {
+  event?.preventDefault();
+  const origin = originInput.value.trim();
+  const destination = destinationInput.value.trim();
+  if (origin.length < 2 || destination.length < 2) {
+    connectionResultsEl.textContent = "Bitte Start und Ziel eingeben.";
+    return;
+  }
+
+  connectionResultsEl.innerHTML = "DB sucht passende Verbindungen...";
+  try {
+    const url = new URL(`${API_BASE}/db/connections`);
+    url.searchParams.set("origin", origin);
+    url.searchParams.set("destination", destination);
+    url.searchParams.set("offset_minutes", String(state.offsetMinutes));
+    const response = await fetch(url);
+    if (!response.ok) {
+      const problem = await response.json().catch(() => ({ detail: `Status ${response.status}` }));
+      throw new Error(problem.detail || `Status ${response.status}`);
+    }
+    const data = await response.json();
+    state.connections = data.connections;
+    renderConnectionResults(data);
+  } catch (error) {
+    connectionResultsEl.innerHTML = `
+      <div class="station-error">
+        <strong>Verbindungssuche fehlgeschlagen.</strong>
+        <span>${error.message}</span>
+      </div>
+    `;
+  }
+}
+
+function renderConnectionResults(data) {
+  if (!data.connections.length) {
+    connectionResultsEl.innerHTML = `
+      <div class="empty-mini">
+        Keine passende Direkt- oder Ein-Umstieg-Verbindung im aktuellen Suchfenster gefunden.
+      </div>
+    `;
+    return;
+  }
+
+  const searchedFrom = formatTime(data.searched_from);
+  connectionResultsEl.innerHTML = `
+    <div class="connection-window">Suche ab ${searchedFrom}</div>
+    ${data.connections.map((connection, index) => connectionCard(connection, index)).join("")}
+  `;
+  [...connectionResultsEl.querySelectorAll(".connection-card")].forEach((button) => {
+    button.addEventListener("click", () => selectConnection(Number(button.dataset.index)));
   });
-  legsEl.append(node);
-  renumberLegs();
 }
 
-function renumberLegs() {
-  [...legsEl.querySelectorAll(".leg legend")].forEach((legend, index) => {
-    legend.textContent = `Abschnitt ${index + 1}`;
+function connectionCard(connection, index) {
+  const legs = connection.legs.map((leg) => `
+    <span>${formatTime(leg.scheduled_departure)} ${leg.line}: ${leg.origin} → ${leg.destination}</span>
+  `).join("");
+  const kind = connection.transfer_count === 0 ? "Direkt" : `${connection.transfer_count} Umstieg`;
+  return `
+    <button class="connection-card" type="button" data-index="${index}">
+      <strong>${formatClock(connection.departure)} → ${formatClock(connection.arrival)} · ${kind}</strong>
+      <span>${connection.duration_minutes} Minuten · ${connection.legs.map((leg) => leg.line).join(" + ")}</span>
+      <div class="connection-legs">${legs}</div>
+    </button>
+  `;
+}
+
+async function selectConnection(index) {
+  const connection = state.connections[index];
+  connectionResultsEl.querySelectorAll(".connection-card").forEach((card) => {
+    card.classList.toggle("selected", Number(card.dataset.index) === index);
   });
-}
 
-function readPayload() {
-  const legs = [...legsEl.querySelectorAll(".leg")].map((leg) => ({
-    origin: leg.querySelector('[name="origin"]').value.trim(),
-    destination: leg.querySelector('[name="destination"]').value.trim(),
-    line: leg.querySelector('[name="line"]').value.trim() || null,
-    scheduled_departure: new Date(leg.querySelector('[name="scheduled_departure"]').value).toISOString(),
-    scheduled_arrival: new Date(leg.querySelector('[name="scheduled_arrival"]').value).toISOString(),
-  }));
-  return { legs };
-}
-
-async function predict(event) {
-  event.preventDefault();
-  resultsEl.innerHTML = `<div class="empty-state"><p class="eyebrow">Rechnet</p><h2>Historische Muster werden sortiert.</h2></div>`;
+  resultsEl.innerHTML = `<div class="empty-state"><p class="eyebrow">Prüft</p><h2>Die ausgewählte Verbindung wird bewertet.</h2></div>`;
   try {
     const response = await fetch(`${API_BASE}/predict`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(readPayload()),
+      body: JSON.stringify({ legs: connection.legs.map(toPredictionLeg) }),
     });
     if (!response.ok) throw new Error(`API antwortet mit Status ${response.status}`);
-    renderResults(await response.json());
+    renderResults(await response.json(), connection);
   } catch (error) {
-    resultsEl.innerHTML = `<div class="empty-state"><p class="eyebrow">API nicht erreichbar</p><h2>Bitte Backend starten oder API-Adresse prüfen.</h2><p>${error.message}</p></div>`;
+    resultsEl.innerHTML = `<div class="empty-state"><p class="eyebrow">Prüfung fehlgeschlagen</p><h2>${error.message}</h2></div>`;
   }
 }
 
-function formatTime(value) {
-  return new Intl.DateTimeFormat("de-DE", {
-    hour: "2-digit",
-    minute: "2-digit",
-    day: "2-digit",
-    month: "2-digit",
-  }).format(new Date(value));
+function toPredictionLeg(leg) {
+  return {
+    origin: leg.origin,
+    destination: leg.destination,
+    line: leg.line,
+    scheduled_departure: leg.scheduled_departure,
+    scheduled_arrival: leg.scheduled_arrival,
+  };
 }
 
-function renderResults(data) {
-  const predictions = data.predictions.map((prediction) => {
-    const window = prediction.arrival_window;
-    return `
-      <article class="prediction">
-        <div class="prediction-head">
-          <div>
-            <p class="eyebrow">${prediction.line}</p>
-            <h3>${prediction.origin} → ${prediction.destination}</h3>
-          </div>
-          <div class="delay-badge">+${prediction.expected_delay_minutes} min</div>
-        </div>
-        <div class="metric-grid">
-          <div class="metric">
-            <span>Planankunft</span>
-            <strong>${formatTime(prediction.scheduled_arrival)}</strong>
-          </div>
-          <div class="metric primary">
-            <span>Realistisch</span>
-            <strong>${formatTime(window.likely)}</strong>
-          </div>
-          <div class="metric">
-            <span>Verlässlichkeit</span>
-            <strong>${prediction.confidence.replace(" / ", " · ")}</strong>
-          </div>
-        </div>
-        <div class="arrival-strip" aria-label="Ankunftsfenster">
-          <div>
-            <span>früh</span>
-            <strong>${formatTime(window.earliest)}</strong>
-          </div>
-          <div>
-            <span>wahrscheinlich</span>
-            <strong>${formatTime(window.likely)}</strong>
-          </div>
-          <div>
-            <span>spät</span>
-            <strong>${formatTime(window.latest)}</strong>
-          </div>
-          <div>
-            <span>pessimistisch</span>
-            <strong>${formatTime(window.pessimistic)}</strong>
-          </div>
-        </div>
-        <p>${prediction.explanation}</p>
-        <p class="fineprint">Datengruppe: ${prediction.sample_size} Beobachtungen</p>
-      </article>
-    `;
-  }).join("");
-
+function renderResults(data, connection) {
+  const summary = summarizeRisk(data.transfers, connection);
   const risks = data.transfers.length
     ? data.transfers.map((risk) => `
       <article class="risk ${risk.risk_level}">
@@ -140,25 +141,117 @@ function renderResults(data) {
         <p class="fineprint">Geplanter Puffer: ${risk.planned_buffer_minutes} Minuten · Risiko: ${Math.round(risk.miss_probability * 100)} Prozent</p>
       </article>
     `).join("")
-    : `<p class="fineprint">Keine Umstiege in dieser Suche.</p>`;
+    : `<p class="fineprint">Diese Verbindung ist direkt. Es gibt keinen Umstieg zu verpassen.</p>`;
+
+  const predictions = data.predictions.map((prediction) => predictionCard(prediction)).join("");
 
   resultsEl.innerHTML = `
+    <section class="risk-summary ${summary.level}">
+      <p class="eyebrow">Ergebnis</p>
+      <h2>${summary.title}</h2>
+      <p>${summary.body}</p>
+    </section>
     <div class="notice">
       <p class="eyebrow">${data.mode}</p>
       <p>${data.data_notice_de}</p>
     </div>
-    <h2>Ankunftsfenster</h2>
-    <div class="prediction-list">${predictions}</div>
+    <h2>Gewählte Verbindung</h2>
+    <div class="selected-route">${connection.legs.map((leg) => `
+      <div>
+        <strong>${formatClock(leg.scheduled_departure)} · ${leg.line}</strong>
+        <span>${leg.origin} → ${leg.destination}</span>
+      </div>
+    `).join("")}</div>
     <h2>Umstiegsrisiko</h2>
     <div class="risk-list">${risks}</div>
+    <h2>Warum?</h2>
+    <div class="prediction-list">${predictions}</div>
   `;
+}
+
+function predictionCard(prediction) {
+  const window = prediction.arrival_window;
+  return `
+    <article class="prediction">
+      <div class="prediction-head">
+        <div>
+          <p class="eyebrow">${prediction.line}</p>
+          <h3>${prediction.origin} → ${prediction.destination}</h3>
+        </div>
+        <div class="delay-badge">+${prediction.expected_delay_minutes} min</div>
+      </div>
+      <div class="metric-grid">
+        <div class="metric">
+          <span>Planankunft</span>
+          <strong>${formatTime(prediction.scheduled_arrival)}</strong>
+        </div>
+        <div class="metric primary">
+          <span>Realistisch</span>
+          <strong>${formatTime(window.likely)}</strong>
+        </div>
+        <div class="metric">
+          <span>Verlässlichkeit</span>
+          <strong>${prediction.confidence}</strong>
+        </div>
+      </div>
+      <div class="arrival-strip" aria-label="Ankunftsfenster">
+        <div><span>früh</span><strong>${formatTime(window.earliest)}</strong></div>
+        <div><span>wahrscheinlich</span><strong>${formatTime(window.likely)}</strong></div>
+        <div><span>spät</span><strong>${formatTime(window.latest)}</strong></div>
+        <div><span>pessimistisch</span><strong>${formatTime(window.pessimistic)}</strong></div>
+      </div>
+      <p>${prediction.explanation}</p>
+      <p class="fineprint">Datengruppe: ${prediction.sample_size} Beobachtungen</p>
+    </article>
+  `;
+}
+
+function summarizeRisk(transfers, connection) {
+  if (!transfers.length) {
+    return {
+      level: "low",
+      title: "Direktverbindung: kein Umstiegsrisiko",
+      body: `Diese Verbindung hat ${connection.transfer_count} Umstiege. Bewertet wird trotzdem die realistische Ankunftszeit.`,
+    };
+  }
+
+  const worst = [...transfers].sort((a, b) => scoreRisk(b) - scoreRisk(a))[0];
+  const probability = Math.round(worst.miss_probability * 100);
+  if (worst.risk_level === "invalid") {
+    return {
+      level: "invalid",
+      title: "Dieser Anschluss funktioniert im Plan schon nicht",
+      body: `Der nächste Zug in ${worst.station} fährt vor der geplanten Ankunft ab.`,
+    };
+  }
+  if (worst.risk_level === "high") {
+    return {
+      level: "high",
+      title: "Riskanter Umstieg",
+      body: `Der kritischste Umstieg ist in ${worst.station}: ${worst.planned_buffer_minutes} Minuten Puffer, ungefähr ${probability} Prozent Verpass-Risiko.`,
+    };
+  }
+  if (worst.risk_level === "medium") {
+    return {
+      level: "medium",
+      title: "Knapp, aber vertretbar",
+      body: `Der engste Umstieg ist in ${worst.station}: ${worst.planned_buffer_minutes} Minuten Puffer, ungefähr ${probability} Prozent Risiko.`,
+    };
+  }
+  return {
+    level: "low",
+    title: "Sieht solide aus",
+    body: `Der kritischste Umstieg ist in ${worst.station}, liegt aber nur bei ungefähr ${probability} Prozent Verpass-Risiko.`,
+  };
+}
+
+function scoreRisk(risk) {
+  return { invalid: 4, high: 3, medium: 2, low: 1 }[risk.risk_level] || 0;
 }
 
 function queueStationSuggestions(query) {
   clearTimeout(stationSearchTimer);
-  if (query.length < 2) {
-    return;
-  }
+  if (query.length < 2) return;
   stationSearchTimer = setTimeout(() => loadStationSuggestions(query), 260);
 }
 
@@ -171,108 +264,37 @@ async function loadStationSuggestions(query) {
       .map((station) => `<option value="${station.name}"></option>`)
       .join("");
   } catch {
-    // Suggestions are helpful, but route entry must still work when DB is unavailable.
+    // Suggestions are optional; manual typing should still work.
   }
 }
 
-async function findTrainsForLeg(leg) {
-  const origin = leg.querySelector('[name="origin"]').value.trim();
-  const destination = leg.querySelector('[name="destination"]').value.trim();
-  const optionsEl = leg.querySelector(".train-options");
-  if (origin.length < 2 || destination.length < 2) {
-    optionsEl.textContent = "Bitte Start und Ziel eingeben.";
-    return;
-  }
-
-  optionsEl.innerHTML = "DB sucht die nächsten passenden Abfahrten...";
-  try {
-    const response = await fetch(
-      `${API_BASE}/db/next-trains?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}`,
-    );
-    if (!response.ok) {
-      const problem = await response.json().catch(() => ({ detail: `Status ${response.status}` }));
-      throw new Error(problem.detail || `Status ${response.status}`);
-    }
-    const data = await response.json();
-    if (!data.departures.length) {
-      optionsEl.textContent = "Keine direkte Abfahrt im aktuellen Zeitfenster gefunden.";
-      return;
-    }
-    optionsEl.innerHTML = data.departures.map((departure, index) => `
-      <button class="train-option" type="button" data-index="${index}">
-        <strong>${formatTime(departure.scheduled_departure)} · ${departure.line}</strong>
-        <span>${departure.origin} → ${departure.destination} · Gleis ${departure.platform || "offen"}</span>
-      </button>
-    `).join("");
-    [...optionsEl.querySelectorAll(".train-option")].forEach((button) => {
-      button.addEventListener("click", () => applyDepartureToLeg(leg, data.departures[Number(button.dataset.index)]));
-    });
-  } catch (error) {
-    optionsEl.innerHTML = `
-      <div class="station-error">
-        <strong>DB-Abfrage fehlgeschlagen.</strong>
-        <span>${error.message}</span>
-      </div>
-    `;
-  }
+function shiftSearch(minutes) {
+  state.offsetMinutes += minutes;
+  searchConnections();
 }
 
-function applyDepartureToLeg(leg, departure) {
-  const scheduledDeparture = new Date(departure.scheduled_departure);
-  const estimatedArrival = new Date(scheduledDeparture.getTime() + estimateDurationMinutes(departure) * 60_000);
-  leg.querySelector('[name="origin"]').value = departure.origin;
-  leg.querySelector('[name="destination"]').value = departure.destination;
-  leg.querySelector('[name="line"]').value = departure.line;
-  leg.querySelector('[name="scheduled_departure"]').value = toInputDateTime(scheduledDeparture);
-  leg.querySelector('[name="scheduled_arrival"]').value = toInputDateTime(estimatedArrival);
-  leg.querySelector(".train-options").innerHTML = `
-    <div class="selected-train">
-      <strong>${departure.line} ausgewählt</strong>
-      <span>Abfahrt aus DB Timetables. Ankunft ist eine lokale Schätzung für die Prognose.</span>
-    </div>
-  `;
+function formatTime(value) {
+  return new Intl.DateTimeFormat("de-DE", {
+    hour: "2-digit",
+    minute: "2-digit",
+    day: "2-digit",
+    month: "2-digit",
+  }).format(new Date(value));
 }
 
-function estimateDurationMinutes(departure) {
-  const known = state.routes.find((route) => (
-    normalizeStation(route.origin) === normalizeStation(departure.origin)
-    && normalizeStation(route.destination) === normalizeStation(departure.destination)
-    && route.line === departure.line
-  ));
-  if (known) return known.typical_minutes;
-  const pathStops = Math.max(2, departure.path?.length || 2);
-  return Math.min(180, Math.max(20, Math.round((pathStops - 1) * 3.5)));
+function formatClock(value) {
+  return new Intl.DateTimeFormat("de-DE", {
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
 }
 
-function toInputDateTime(date) {
-  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
-  return local.toISOString().slice(0, 16);
+for (const input of [originInput, destinationInput]) {
+  input.addEventListener("input", () => queueStationSuggestions(input.value));
 }
 
-function normalizeStation(value) {
-  return value
-    .toLowerCase()
-    .replaceAll("ö", "oe")
-    .replaceAll("ü", "ue")
-    .replaceAll("ä", "ae")
-    .replaceAll("ß", "ss");
-}
+planner.addEventListener("submit", searchConnections);
+document.querySelector("#previous-connections").addEventListener("click", () => shiftSearch(-60));
+document.querySelector("#later-connections").addEventListener("click", () => shiftSearch(60));
 
-function loadDemo() {
-  legsEl.innerHTML = "";
-  addLeg(
-    { origin: "Köln Hbf", destination: "Düsseldorf Hbf", line: "RE1" },
-    { departure: "2026-06-22T07:30", arrival: "2026-06-22T08:05" },
-  );
-  addLeg(
-    { origin: "Düsseldorf Hbf", destination: "Duisburg Hbf", line: "RE1" },
-    { departure: "2026-06-22T08:14", arrival: "2026-06-22T08:32" },
-  );
-}
-
-document.querySelector("#add-leg").addEventListener("click", () => addLeg());
-document.querySelector("#load-demo").addEventListener("click", loadDemo);
-planner.addEventListener("submit", predict);
-
-await loadRoutes();
-loadDemo();
+await loadApiStatus();

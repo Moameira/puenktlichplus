@@ -1,6 +1,8 @@
 from datetime import datetime
 
 from app.schemas import LegRequest
+from app.services.cache import JsonCache
+from app.services.collector import TimetableSnapshotStore
 from app.services.connection_risk import ConnectionRiskCalculator
 from app.services.data_source import DelayRepository, DbTimetablesClient
 from app.services.delay_model import ExplainableDelayModel
@@ -100,6 +102,47 @@ def test_db_departure_parser_filters_by_destination_path():
     assert departures[0]["destination"] == "Duesseldorf Hbf"
 
 
+def test_station_board_parser_and_snapshot_store(tmp_path):
+    xml = """
+    <timetable station="8000207">
+      <s id="1">
+        <tl c="RE" n="1" />
+        <dp pt="2606211035" pp="4" l="RE1" ppth="Leverkusen Mitte|Duesseldorf Hbf" />
+      </s>
+    </timetable>
+    """
+    station = {"name": "Koeln Hbf", "eva": "8000207"}
+
+    departures = DbTimetablesClient.parse_station_board_departures(xml, station)
+    store = TimetableSnapshotStore(tmp_path / "collector.sqlite")
+    saved = store.save_departures(station, departures, datetime.fromisoformat("2026-06-21T10:00:00+02:00"))
+
+    assert departures[0]["line"] == "RE1"
+    assert saved == 1
+    assert store.summary()["snapshot_count"] == 1
+
+
 def test_station_query_germanizes_common_city_names():
     assert DbTimetablesClient.germanize_station_query("Koeln Hbf") == "Köln Hbf"
     assert DbTimetablesClient.germanize_station_query("Duesseldorf Hbf") == "Düsseldorf Hbf"
+
+
+def test_connection_payload_contains_prediction_ready_legs(tmp_path):
+    client = DbTimetablesClient(JsonCache(tmp_path / "cache"))
+    connection = client._connection_from_departures(
+        [
+            {
+                "origin": "Köln Hbf",
+                "destination": "Düsseldorf Hbf",
+                "line": "RE1",
+                "train": "RE 1",
+                "platform": "4",
+                "scheduled_departure": "2026-06-22T07:30:00+02:00",
+                "path": ["Düsseldorf Hbf"],
+            }
+        ]
+    )
+
+    assert connection["kind"] == "direct"
+    assert connection["transfer_count"] == 0
+    assert connection["legs"][0]["scheduled_arrival"] == "2026-06-22T08:05:00+02:00"

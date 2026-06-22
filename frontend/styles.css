@@ -183,6 +183,76 @@ h2 {
   margin: var(--space-4) 0;
 }
 
+.route-search {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+  margin: var(--space-4) 0;
+}
+
+.connection-results {
+  display: grid;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}
+
+.connection-window,
+.empty-mini {
+  padding: var(--space-3);
+  border: 2px dashed var(--color-line);
+  border-radius: var(--radius);
+  background: #fffef7;
+  color: var(--color-muted);
+  font-size: 0.9rem;
+}
+
+.connection-card {
+  display: grid;
+  gap: var(--space-1);
+  justify-items: stretch;
+  min-height: auto;
+  padding: var(--space-3);
+  text-align: left;
+  background: white;
+}
+
+.connection-card.selected {
+  background: var(--color-yellow);
+}
+
+.connection-card span {
+  color: var(--color-muted);
+  font-size: 0.9rem;
+  font-weight: 400;
+}
+
+.connection-legs {
+  display: grid;
+  gap: 2px;
+  margin-top: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 2px dashed var(--color-line);
+}
+
+.api-status {
+  display: grid;
+  gap: 2px;
+  margin-top: var(--space-4);
+  padding: var(--space-3);
+  border: 2px solid var(--color-line);
+  border-radius: var(--radius);
+  background: rgba(226, 0, 26, 0.1);
+  font-size: 0.9rem;
+}
+
+.api-status.ok {
+  background: rgba(17, 163, 106, 0.12);
+}
+
+.api-status span {
+  color: var(--color-muted);
+}
+
 .leg {
   position: relative;
   display: grid;
@@ -375,6 +445,62 @@ button:hover {
   background: white;
 }
 
+.selected-route {
+  display: grid;
+  gap: var(--space-2);
+  margin: var(--space-4) 0;
+}
+
+.selected-route div {
+  display: grid;
+  gap: 2px;
+  padding: var(--space-3);
+  border: 2px solid var(--color-line);
+  border-radius: var(--radius);
+  background: #fffef7;
+}
+
+.selected-route span {
+  color: var(--color-muted);
+}
+
+.risk-summary {
+  display: grid;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+  padding: var(--space-4);
+  border: 4px solid var(--color-line);
+  border-radius: var(--radius);
+  background: white;
+  box-shadow: 4px 4px 0 var(--color-line);
+}
+
+.risk-summary h2 {
+  font-size: clamp(1.6rem, 4vw, 2.5rem);
+}
+
+.risk-summary p {
+  margin: 0;
+  line-height: 1.45;
+}
+
+.risk-summary.low {
+  background: rgba(17, 163, 106, 0.14);
+}
+
+.risk-summary.medium {
+  background: rgba(255, 212, 59, 0.35);
+}
+
+.risk-summary.high,
+.risk-summary.invalid {
+  background: rgba(226, 0, 26, 0.12);
+}
+
+.risk-summary.neutral {
+  background: rgba(20, 99, 255, 0.1);
+}
+
 .prediction-list,
 .risk-list {
   display: grid;
@@ -548,6 +674,10 @@ button:hover {
   }
 
   .leg {
+    grid-template-columns: 1fr;
+  }
+
+  .route-search {
     grid-template-columns: 1fr;
   }
 
