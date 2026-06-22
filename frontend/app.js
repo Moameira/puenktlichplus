@@ -61,7 +61,7 @@ async function searchConnections(event) {
     connectionResultsEl.innerHTML = `
       <div class="station-error">
         <strong>Verbindungssuche fehlgeschlagen.</strong>
-        <span>${error.message}</span>
+        <span>${escapeHtml(error.message)}</span>
       </div>
     `;
   }
@@ -89,13 +89,13 @@ function renderConnectionResults(data) {
 
 function connectionCard(connection, index) {
   const legs = connection.legs.map((leg) => `
-    <span>${formatTime(leg.scheduled_departure)} ${leg.line}: ${leg.origin} → ${leg.destination}</span>
+    <span>${formatTime(leg.scheduled_departure)} ${escapeHtml(leg.line)}: ${escapeHtml(leg.origin)} → ${escapeHtml(leg.destination)}</span>
   `).join("");
   const kind = connection.transfer_count === 0 ? "Direkt" : `${connection.transfer_count} Umstieg`;
   return `
     <button class="connection-card" type="button" data-index="${index}">
       <strong>${formatClock(connection.departure)} → ${formatClock(connection.arrival)} · ${kind}</strong>
-      <span>${connection.duration_minutes} Minuten · ${connection.legs.map((leg) => leg.line).join(" + ")}</span>
+      <span>${connection.duration_minutes} Minuten · ${connection.legs.map((leg) => escapeHtml(leg.line)).join(" + ")}</span>
       <div class="connection-legs">${legs}</div>
     </button>
   `;
@@ -117,7 +117,7 @@ async function selectConnection(index) {
     if (!response.ok) throw new Error(`API antwortet mit Status ${response.status}`);
     renderResults(await response.json(), connection);
   } catch (error) {
-    resultsEl.innerHTML = `<div class="empty-state"><p class="eyebrow">Prüfung fehlgeschlagen</p><h2>${error.message}</h2></div>`;
+    resultsEl.innerHTML = `<div class="empty-state"><p class="eyebrow">Prüfung fehlgeschlagen</p><h2>${escapeHtml(error.message)}</h2></div>`;
   }
 }
 
@@ -136,8 +136,8 @@ function renderResults(data, connection) {
   const risks = data.transfers.length
     ? data.transfers.map((risk) => `
       <article class="risk ${risk.risk_level}">
-        <h3>Umstieg in ${risk.station}</h3>
-        <p>${risk.message_de}</p>
+        <h3>Umstieg in ${escapeHtml(risk.station)}</h3>
+        <p>${escapeHtml(risk.message_de)}</p>
         <p class="fineprint">Geplanter Puffer: ${risk.planned_buffer_minutes} Minuten · Risiko: ${Math.round(risk.miss_probability * 100)} Prozent</p>
       </article>
     `).join("")
@@ -152,14 +152,14 @@ function renderResults(data, connection) {
       <p>${summary.body}</p>
     </section>
     <div class="notice">
-      <p class="eyebrow">${data.mode}</p>
-      <p>${data.data_notice_de}</p>
+      <p class="eyebrow">${escapeHtml(data.mode)}</p>
+      <p>${escapeHtml(data.data_notice_de)}</p>
     </div>
     <h2>Gewählte Verbindung</h2>
     <div class="selected-route">${connection.legs.map((leg) => `
       <div>
-        <strong>${formatClock(leg.scheduled_departure)} · ${leg.line}</strong>
-        <span>${leg.origin} → ${leg.destination}</span>
+        <strong>${formatClock(leg.scheduled_departure)} · ${escapeHtml(leg.line)}</strong>
+        <span>${escapeHtml(leg.origin)} → ${escapeHtml(leg.destination)}</span>
       </div>
     `).join("")}</div>
     <h2>Umstiegsrisiko</h2>
@@ -175,8 +175,8 @@ function predictionCard(prediction) {
     <article class="prediction">
       <div class="prediction-head">
         <div>
-          <p class="eyebrow">${prediction.line}</p>
-          <h3>${prediction.origin} → ${prediction.destination}</h3>
+          <p class="eyebrow">${escapeHtml(prediction.line)}</p>
+          <h3>${escapeHtml(prediction.origin)} → ${escapeHtml(prediction.destination)}</h3>
         </div>
         <div class="delay-badge">+${prediction.expected_delay_minutes} min</div>
       </div>
@@ -191,7 +191,7 @@ function predictionCard(prediction) {
         </div>
         <div class="metric">
           <span>Verlässlichkeit</span>
-          <strong>${prediction.confidence}</strong>
+          <strong>${escapeHtml(prediction.confidence)}</strong>
         </div>
       </div>
       <div class="arrival-strip" aria-label="Ankunftsfenster">
@@ -200,7 +200,7 @@ function predictionCard(prediction) {
         <div><span>spät</span><strong>${formatTime(window.latest)}</strong></div>
         <div><span>pessimistisch</span><strong>${formatTime(window.pessimistic)}</strong></div>
       </div>
-      <p>${prediction.explanation}</p>
+      <p>${escapeHtml(prediction.explanation)}</p>
       <p class="fineprint">Datengruppe: ${prediction.sample_size} Beobachtungen</p>
     </article>
   `;
@@ -221,27 +221,27 @@ function summarizeRisk(transfers, connection) {
     return {
       level: "invalid",
       title: "Dieser Anschluss funktioniert im Plan schon nicht",
-      body: `Der nächste Zug in ${worst.station} fährt vor der geplanten Ankunft ab.`,
+      body: `Der nächste Zug in ${escapeHtml(worst.station)} fährt vor der geplanten Ankunft ab.`,
     };
   }
   if (worst.risk_level === "high") {
     return {
       level: "high",
       title: "Riskanter Umstieg",
-      body: `Der kritischste Umstieg ist in ${worst.station}: ${worst.planned_buffer_minutes} Minuten Puffer, ungefähr ${probability} Prozent Verpass-Risiko.`,
+      body: `Der kritischste Umstieg ist in ${escapeHtml(worst.station)}: ${worst.planned_buffer_minutes} Minuten Puffer, ungefähr ${probability} Prozent Verpass-Risiko.`,
     };
   }
   if (worst.risk_level === "medium") {
     return {
       level: "medium",
       title: "Knapp, aber vertretbar",
-      body: `Der engste Umstieg ist in ${worst.station}: ${worst.planned_buffer_minutes} Minuten Puffer, ungefähr ${probability} Prozent Risiko.`,
+      body: `Der engste Umstieg ist in ${escapeHtml(worst.station)}: ${worst.planned_buffer_minutes} Minuten Puffer, ungefähr ${probability} Prozent Risiko.`,
     };
   }
   return {
     level: "low",
     title: "Sieht solide aus",
-    body: `Der kritischste Umstieg ist in ${worst.station}, liegt aber nur bei ungefähr ${probability} Prozent Verpass-Risiko.`,
+    body: `Der kritischste Umstieg ist in ${escapeHtml(worst.station)}, liegt aber nur bei ungefähr ${probability} Prozent Verpass-Risiko.`,
   };
 }
 
@@ -261,7 +261,7 @@ async function loadStationSuggestions(query) {
     if (!response.ok) return;
     const data = await response.json();
     stationSuggestionsEl.innerHTML = data.stations
-      .map((station) => `<option value="${station.name}"></option>`)
+      .map((station) => `<option value="${escapeAttribute(station.name)}"></option>`)
       .join("");
   } catch {
     // Suggestions are optional; manual typing should still work.
@@ -287,6 +287,19 @@ function formatClock(value) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(value));
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function escapeAttribute(value) {
+  return escapeHtml(value).replaceAll("`", "&#096;");
 }
 
 for (const input of [originInput, destinationInput]) {

@@ -1,10 +1,25 @@
 # PünktlichPlus
 
+[![Live Demo](https://img.shields.io/badge/live-demo-e2001a)](https://puenktlichplus.vercel.app/)
+[![Backend](https://img.shields.io/badge/backend-Railway-1463ff)](https://puenktlichplus-production.up.railway.app/health)
+[![Python](https://img.shields.io/badge/Python-FastAPI-11a36a)](https://fastapi.tiangolo.com/)
+[![Frontend](https://img.shields.io/badge/frontend-Vercel-17202a)](https://vercel.com/)
+
 PünktlichPlus is an Umstiegsrisiko-Checker for Deutsche Bahn trips in NRW. It combines live DB Timetables data with an explainable delay-risk model to answer one practical question: is this transfer actually realistic, or only realistic on paper?
 
 The point is deliberately practical: a recruiter should see real API integration, caching/rate limiting, data modeling, clean backend architecture, and an honest explanation of what the system can and cannot know.
 
 The UI is German-only for v1 because the target use case is a German railway portfolio demo.
+
+Live demo: [puenktlichplus.vercel.app](https://puenktlichplus.vercel.app/)
+
+## Screenshot
+
+Add a screenshot of the live Vercel app here before sharing the repository widely:
+
+```text
+![PünktlichPlus live app](docs/screenshots/puenktlichplus-live.png)
+```
 
 ## What It Does
 
@@ -29,6 +44,17 @@ Important limitation: this is not a free historical per-route delay archive. For
 The backend protects DB's free quota with local JSON caching and a conservative 20-calls-per-minute app-side rate limit, below DB's listed 60-calls-per-minute free plan.
 
 ## Architecture
+
+```mermaid
+flowchart LR
+    user["User / Recruiter"] --> frontend["Vercel static frontend"]
+    frontend --> api["Railway FastAPI backend"]
+    api --> db["DB Timetables API"]
+    api --> model["Explainable NRW risk model"]
+    api --> cache["JSON cache + rate limit"]
+    api --> collector["SQLite snapshot collector"]
+    collector --> future["Future project-owned delay dataset"]
+```
 
 ```text
 backend/
@@ -83,6 +109,8 @@ COLLECTOR_STATIONS=Köln Hbf,Düsseldorf Hbf,Duisburg Hbf,Essen Hbf,Dortmund Hbf
 ```
 
 The collector writes to `backend/app/data/collector.sqlite`, which is intentionally ignored by Git.
+
+On Railway, the normal filesystem should be treated as ephemeral. For long-running production collection, attach a Railway Volume or move the collector store to a hosted database such as Postgres. The current SQLite collector is intentionally simple for a portfolio demo and local experimentation.
 
 ## Optional DB Credentials
 

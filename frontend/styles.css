@@ -253,6 +253,22 @@ h2 {
   color: var(--color-muted);
 }
 
+.data-note {
+  display: grid;
+  gap: 2px;
+  margin-top: var(--space-3);
+  padding: var(--space-3);
+  border: 2px dashed var(--color-line);
+  border-radius: var(--radius);
+  background: rgba(20, 99, 255, 0.08);
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.data-note span {
+  color: var(--color-muted);
+}
+
 .leg {
   position: relative;
   display: grid;
