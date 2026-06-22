@@ -17,9 +17,9 @@ Live demo: [puenktlichplus.vercel.app](https://puenktlichplus.vercel.app/)
 
 Add a screenshot of the live Vercel app here before sharing the repository widely:
 
-```text
+
 ![PünktlichPlus live app](docs/screenshots/puenktlichplus-live.png)
-```
+
 
 ## What It Does
 
